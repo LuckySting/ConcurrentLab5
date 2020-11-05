@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Diagnostics;
+using System.Threading;
 
 namespace ConcurrentLab5
 {
@@ -15,11 +16,13 @@ namespace ConcurrentLab5
             b = t;
         }
 
-        static void syncShellSort(ref int[] array, int start, int stop = 1)
+        static void syncShellSort(ref int[] array, int devidersCount, Func<int, int, int> getDevider)
         {
-            var d = start;
-            while (d >= stop)
+            int d = -1;
+            for (int di = 0; di < devidersCount; di++)
             {
+                d = getDevider(di, d);
+                if (d < 1) break;
                 for (var i = d; i < array.Length; i++)
                 {
                     var j = i;
@@ -29,13 +32,34 @@ namespace ConcurrentLab5
                         j = j - d;
                     }
                 }
-                d = d / 2;
             }
         }
 
-        static void parallelShellSort(ref int[] array)
+        static Func<int, int, int> getParallelShelSortDevider(int start, int step)
         {
+            return (int di, int d) => {
+                if (di == 0) return start;
+                else return d + step;
+            };
+        }
 
+        static void parallelShellSort(ref int[] array, int threadsCount)
+        {
+            var threads = new Thread[threadsCount];
+            int devidersCount = array.Length / threadsCount;
+            for (int i = 0; i < threads.Length; i++)
+            {
+                threads[i] = new Thread((object o) => {
+                    int[] arr = (int[]) o;
+                    syncShellSort(ref arr, devidersCount, getParallelShelSortDevider(i, threadsCount));
+                });
+                threads[i].Start((object)array);
+            }
+            for (int i = 0; i < threads.Length; i++)
+            {
+                threads[i].Join();
+            }
+            syncShellSort(ref array, array.Length, getParallelShelSortDevider(1, 0));
         }
 
         static int[] randomArr(int len)
@@ -70,7 +94,11 @@ namespace ConcurrentLab5
                 // int[] a = ascArr(len);
                 // int[] a = descArr(len);
                 sw.Restart();
-                syncShellSort(ref a, a.Length / 2);
+                // syncShellSort(ref a, a.Length / 2, (int di, int d) => {
+                //     if (di == 0) return a.Length;
+                //     else return d / 2;
+                // });
+                parallelShellSort(ref a, 4);
                 sw.Stop();
                 Console.WriteLine("{1}", len, Math.Round(sw.Elapsed.TotalMilliseconds));
             }
